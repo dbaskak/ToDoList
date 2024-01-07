@@ -47,7 +47,7 @@ class TodoList:
     def add_subtask(self, index, subtask):
         # Add a subtask to the task at the specified index
         if 0 <= index <= len(self.tasks):
-            self.tasks[index]['subtasks'].append({'subtask': subtask, 'done': False})
+            self.tasks[index]['subtask'].append({'subtask': subtask, 'done': False})
             # Save the updated tasks
             self.save_tasks()
 
@@ -62,26 +62,26 @@ class TodoApp:
         self.todo = TodoList()
 
         # Create Tkinter widgets
-        self.task_entry = tk.Entry(root, width=20)
-        self.task_entry.pack(paddy=10)
+        self.task_entry = tk.Entry(root, width=50)
+        self.task_entry.pack(pady=10)
 
-        self.add_button = tk.Button(root, text="Task", command=self.add_task)
-        self.add_button.pack(paddy=10)
+        self.add_button = tk.Button(root, text="Add Task", command=self.add_task)
+        self.add_button.pack(pady=5)
 
-        self.task_listbox = tk.Listbox(root, selectmode=tk.SINGLE)
-        self.task_listbox.pack(paddy=10)
+        self.task_listbox = tk.Listbox(root, selectmode=tk.SINGLE, width=50)
+        self.task_listbox.pack(pady=10)
 
-        self.remove_button = tk.Button(root, text="REmove", command=self.remove_task)
-        self.remove_button.pack(paddy=10)
+        self.remove_button = tk.Button(root, text="Remove Task", command=self.remove_task)
+        self.remove_button.pack(pady=5)
 
-        self.done_button = tk.Button(root, text="Done", command=self.mark_as_done)
-        self.done_button.pack(paddy=10)
+        self.done_button = tk.Button(root, text="Mark as Done", command=self.mark_as_done)
+        self.done_button.pack(pady=5)
 
-        self.subtask_entry = tk.Entry(root, width=20)
-        self.subtask_entry.pack(paddy=10)
+        self.subtask_entry = tk.Entry(root, width=50)
+        self.subtask_entry.pack(pady=10)
 
-        self.add_subtask_button = tk.Button(root, text="Subtask", command=self.add_subtask)
-        self.add_subtask_button.pack(pady=10)
+        self.add_subtask_button = tk.Button(root, text="Add Subtask", command=self.add_subtask)
+        self.add_subtask_button.pack(pady=5)
 
         # Populate the task listbox with existing tasks
         self.populate_task_listbox()
@@ -94,25 +94,46 @@ class TodoApp:
         self.task_entry.delete(0, tk.END)
 
     def remove_task(self):
-        # Remove the selected task from TodoList and update the task listbox
+        # Remove the selected task or subtask from TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            self.todo.remove_task(selected_index[0])
-            self.populate_task_listbox()
+            item_text = self.task_listbox.get(selected_index[0])
+            try:
+                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
+            except ValueError:
+                return
+
+            if 1 <= main_index <= len(self.todo.tasks):
+                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
+                    del self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]
+                elif not subtask_index:
+                    del self.todo.tasks[main_index - 1]
+                self.populate_task_listbox()
 
     def mark_as_done(self):
-        # Mark the selected task as done in TodoList and update the task listbox
+        # Mark the selected task or subtask as done in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            self.todo.mark_as_done(selected_index[0])
-            self.populate_task_listbox()
+            item_text = self.task_listbox.get(selected_index[0])
+            try:
+                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
+            except ValueError:
+                return
+
+            if 1 <= main_index <= len(self.todo.tasks):
+                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
+                    self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]['done'] = True
+                elif not subtask_index:
+                    self.todo.tasks[main_index - 1]['done'] = True
+                self.populate_task_listbox()
 
     def add_subtask(self):
         # Add a subtask to the selected task in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
+            original_index = selected_index[0]
             subtask_text = self.subtask_entry.get()
-            self.todo.add_subtask(selected_index[0], subtask_text)
+            self.todo.add_subtask(original_index, subtask_text)
             self.populate_task_listbox()
             self.subtask_entry.delete(0, tk.END)
 
@@ -121,8 +142,14 @@ class TodoApp:
         self.task_listbox.delete(0, tk.END)
         for index, task in enumerate(self.todo.tasks, start=1):
             status = 'Done' if task['done'] else 'Not Done'
-            deadline = f" (Deadline: {task['deadline']}" if task['deadline'] else ""
+            deadline = f" (Deadline: {task['deadline']})" if task['deadline'] else ""
             self.task_listbox.insert(tk.END, f"{index}. {task['task']} - {status} {deadline}")
+
+            # Check if there are subtasks and display them
+            subtasks = task.get('subtask', [])
+            for subtask_index, subtask in enumerate(subtasks, start=1):
+                subtask_status = 'Done' if subtask['done'] else 'Not Done'
+                self.task_listbox.insert(tk.END, f"     - Subtask: {subtask['subtask']} - {subtask_status}")
 
 
 if __name__ == "__main__":
