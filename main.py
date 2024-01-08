@@ -37,10 +37,17 @@ class TodoList:
             # Save the updated tasks
             self.save_tasks()
 
-    def mark_as_done(self, index):
-        # Mark a task as done at the specified index
-        if 0 <= index <= len(self.tasks):
-            self.tasks[index]['done'] = True
+    def mark_as_done(self, index, subtask_index=None):
+        # Mark a task or subtask as done at the specified index
+        if 0 <= index < len(self.tasks):
+            if subtask_index is None:
+                # Mark the main task as done
+                self.tasks[index]['done'] = True
+            else:
+                # Mark the subtask as done
+                subtasks = self.tasks[index].get('subtask', [])
+                if 0 <= subtask_index < len(subtasks):
+                    subtasks[subtask_index]['done'] = True
             # Save the updated tasks
             self.save_tasks()
 
@@ -50,6 +57,15 @@ class TodoList:
             self.tasks[index]['subtask'].append({'subtask': subtask, 'done': False})
             # Save the updated tasks
             self.save_tasks()
+
+    def remove_subtask(self, index, subtask_index):
+        # Remove a subtask from the task at the specified index
+        if 0 <= index < len(self.tasks):
+            subtasks = self.tasks[index].get('subtask', [])
+            if 0 <= subtask_index < len(subtasks):
+                del subtasks[subtask_index]
+                # Save the updated tasks
+                self.save_tasks()
 
 
 class TodoApp:
@@ -83,6 +99,9 @@ class TodoApp:
         self.add_subtask_button = tk.Button(root, text="Add Subtask", command=self.add_subtask)
         self.add_subtask_button.pack(pady=5)
 
+        self.remove_subtask_button = tk.Button(root, text="Remove Subtask", command=self.remove_subtask)
+        self.remove_subtask_button.pack(pady=5)
+
         # Populate the task listbox with existing tasks
         self.populate_task_listbox()
 
@@ -94,48 +113,42 @@ class TodoApp:
         self.task_entry.delete(0, tk.END)
 
     def remove_task(self):
-        # Remove the selected task or subtask from TodoList and update the task listbox
+        # Remove the selected task from TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            item_text = self.task_listbox.get(selected_index[0])
-            try:
-                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
-            except ValueError:
-                return
-
-            if 1 <= main_index <= len(self.todo.tasks):
-                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
-                    del self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]
-                elif not subtask_index:
-                    del self.todo.tasks[main_index - 1]
-                self.populate_task_listbox()
+            self.todo.remove_task(selected_index[0])
+            self.populate_task_listbox()
 
     def mark_as_done(self):
         # Mark the selected task or subtask as done in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            try:
-                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
-            except ValueError:
-                return
-
-            if 1 <= main_index <= len(self.todo.tasks):
-                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
-                    self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]['done'] = True
-                elif not subtask_index:
-                    self.todo.tasks[main_index - 1]['done'] = True
-                self.populate_task_listbox()
+            main_index, subtask_index = map(int, item_text.split('.')[0].split('-')[:2])
+            if subtask_index:
+                self.todo.mark_as_done(main_index - 1, subtask_index - 1)
+            else:
+                self.todo.mark_as_done(main_index - 1)
+            self.populate_task_listbox()
 
     def add_subtask(self):
         # Add a subtask to the selected task in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            original_index = selected_index[0]
             subtask_text = self.subtask_entry.get()
-            self.todo.add_subtask(original_index, subtask_text)
+            self.todo.add_subtask(selected_index, subtask_text)
             self.populate_task_listbox()
             self.subtask_entry.delete(0, tk.END)
+
+    def remove_subtask(self):
+        # Remove the selected subtask from TodoList and update the task listbox
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            item_text = self.task_listbox.get(selected_index[0])
+            main_index, subtask_index = map(int, item_text.split('.')[0].split('-')[:2])
+            if subtask_index:
+                self.todo.remove_subtask(main_index - 1, subtask_index - 1)
+                self.populate_task_listbox()
 
     def populate_task_listbox(self):
         # Populate the task listbox with tasks from TodoList
