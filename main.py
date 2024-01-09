@@ -1,6 +1,7 @@
 import json
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
+from datetime import datetime
 
 
 class TodoList:
@@ -24,6 +25,12 @@ class TodoList:
         self.tasks.append({'task': task, 'done': False, 'deadline': deadline, 'subtask': []})
         # Save the updated tasks
         self.save_tasks()
+
+    def change_deadline(self, index, new_deadline):
+        # Add task deadline
+        if 0 <= index < len(self.tasks):
+            self.tasks[index]['deadline'] = new_deadline
+            self.save_tasks()
 
     def save_tasks(self):
         # Save tasks to the file
@@ -53,7 +60,7 @@ class TodoList:
 
     def add_subtask(self, index, subtask):
         # Add a subtask to the task at the specified index
-        if 0 <= index <= len(self.tasks):
+        if 0 <= index < len(self.tasks):
             self.tasks[index]['subtask'].append({'subtask': subtask, 'done': False})
             # Save the updated tasks
             self.save_tasks()
@@ -105,6 +112,10 @@ class TodoApp:
         # Populate the task listbox with existing tasks
         self.populate_task_listbox()
 
+        # Deadline change button
+        self.change_deadline_button = tk.Button(root, text="Change Deadline", command=self.change_deadline)
+        self.change_deadline_button.pack(pady=5)
+
     def add_task(self):
         # Add a new task to TodoList and update the task listbox
         new_task = self.task_entry.get()
@@ -124,7 +135,9 @@ class TodoApp:
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            main_index, subtask_index = map(int, item_text.split('.')[0].split('-')[:2])
+            main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
+            if isinstance(subtask_index, list):
+                subtask_index = subtask_index[0]
             if subtask_index:
                 self.todo.mark_as_done(main_index - 1, subtask_index - 1)
             else:
@@ -136,17 +149,27 @@ class TodoApp:
         selected_index = self.task_listbox.curselection()
         if selected_index:
             subtask_text = self.subtask_entry.get()
-            self.todo.add_subtask(selected_index, subtask_text)
-            self.populate_task_listbox()
-            self.subtask_entry.delete(0, tk.END)
+            item_text = self.task_listbox.get(selected_index[0])
+            main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
+            if isinstance(subtask_index, list) and subtask_index:
+                subtask_index = subtask_index[0]
+            if 0 <= main_index - 1 < len(self.todo.tasks):
+                self.todo.add_subtask(main_index - 1, subtask_text)
+                self.populate_task_listbox()
+                self.subtask_entry.delete(0, tk.END)
+
+    def get_indices(self, selected_index):
+        item_text = self.task_listbox.get(selected_index[0])
+        return [int(index) for index in item_text.split('.')[0].split('-') if index.isdigit()]
 
     def remove_subtask(self):
         # Remove the selected subtask from TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            main_index, subtask_index = map(int, item_text.split('.')[0].split('-')[:2])
-            if subtask_index:
+            indices = [int(index) for index in item_text.split('.')[0].split('-') if index.isdigit()]
+            if len(indices) == 2:
+                main_index, subtask_index = indices
                 self.todo.remove_subtask(main_index - 1, subtask_index - 1)
                 self.populate_task_listbox()
 
@@ -155,14 +178,44 @@ class TodoApp:
         self.task_listbox.delete(0, tk.END)
         for index, task in enumerate(self.todo.tasks, start=1):
             status = 'Done' if task['done'] else 'Not Done'
-            deadline = f" (Deadline: {task['deadline']})" if task['deadline'] else ""
-            self.task_listbox.insert(tk.END, f"{index}. {task['task']} - {status} {deadline}")
+
+            if isinstance(task['deadline'], str):
+                deadline = f" (Deadline: {task['deadline']})"
+            elif isinstance(task['deadline'], datetime):
+                deadline = f" (Deadline: {task['deadline'].strftime('%Y-%m-%d')})"
+            else:
+                deadline = ""
+
+            self.task_listbox.insert(tk.END, f"{index}. {task['task']} - {status}{deadline}")
 
             # Check if there are subtasks and display them
             subtasks = task.get('subtask', [])
             for subtask_index, subtask in enumerate(subtasks, start=1):
                 subtask_status = 'Done' if subtask['done'] else 'Not Done'
                 self.task_listbox.insert(tk.END, f"     - Subtask: {subtask['subtask']} - {subtask_status}")
+
+    def change_deadline(self):
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            try:
+                selected_index = selected_index[0]
+                new_deadline = self.get_user_input("Enter new deadline:")
+                if new_deadline:  # Check if new_deadline is not an empty string
+                    item_text = self.task_listbox.get(selected_index)
+                    main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
+                    if isinstance(subtask_index, list):
+                        subtask_index = subtask_index[0]
+                    if subtask_index:
+                        self.todo.change_deadline(main_index - 1, subtask_index - 1)
+                    else:
+                        self.todo.change_deadline(main_index - 1, new_deadline)
+                    self.populate_task_listbox()
+            except IndexError:
+                messagebox.showerror("Error", "Task not found!")
+
+    def get_user_input(self, prompt):
+        user_input = simpledialog.askstring("Input", prompt)
+        return user_input
 
 
 if __name__ == "__main__":
