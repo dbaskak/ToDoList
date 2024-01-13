@@ -1,6 +1,7 @@
 import json
 import tkinter as tk
 from tkinter import messagebox, simpledialog
+import tkinter.filedialog as filedialog
 from datetime import datetime
 
 
@@ -116,6 +117,10 @@ class TodoApp:
         self.change_deadline_button = tk.Button(root, text="Change Deadline", command=self.change_deadline)
         self.change_deadline_button.pack(pady=5)
 
+        # File select button
+        self.select_file_button = tk.Button(root, text="Select Todo List File", command=self.select_file)
+        self.select_file_button.pack(pady=5)
+
     def add_task(self):
         # Add a new task to TodoList and update the task listbox
         new_task = self.task_entry.get()
@@ -135,14 +140,17 @@ class TodoApp:
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
-            if isinstance(subtask_index, list):
-                subtask_index = subtask_index[0]
-            if subtask_index:
-                self.todo.mark_as_done(main_index - 1, subtask_index - 1)
-            else:
-                self.todo.mark_as_done(main_index - 1)
-            self.populate_task_listbox()
+            clean_text = item_text.strip()
+            indices = [int(index) for index in clean_text.split('.')[0].split('-')[:2] if index.isdigit()]
+            if indices:
+                main_index, *subtask_index = indices + [0]
+                if isinstance(subtask_index, list):
+                    subtask_index = subtask_index[0]
+                if subtask_index is not None:
+                    self.todo.mark_as_done(main_index - 1, subtask_index - 1)
+                else:
+                    self.todo.mark_as_done(main_index - 1)
+                self.populate_task_listbox()
 
     def add_subtask(self):
         # Add a subtask to the selected task in TodoList and update the task listbox
@@ -159,6 +167,7 @@ class TodoApp:
                 self.subtask_entry.delete(0, tk.END)
 
     def get_indices(self, selected_index):
+        # Get element index from Listbox
         item_text = self.task_listbox.get(selected_index[0])
         return [int(index) for index in item_text.split('.')[0].split('-') if index.isdigit()]
 
@@ -167,7 +176,8 @@ class TodoApp:
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            indices = [int(index) for index in item_text.split('.')[0].split('-') if index.isdigit()]
+            clean_text = item_text.strip()
+            indices = [int(index) for index in clean_text.split('.')[0].split('-') if index.isdigit()]
             if len(indices) == 2:
                 main_index, subtask_index = indices
                 self.todo.remove_subtask(main_index - 1, subtask_index - 1)
@@ -199,19 +209,36 @@ class TodoApp:
         if selected_index:
             try:
                 selected_index = selected_index[0]
-                new_deadline = self.get_user_input("Enter new deadline:")
-                if new_deadline:  # Check if new_deadline is not an empty string
-                    item_text = self.task_listbox.get(selected_index)
-                    main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
-                    if isinstance(subtask_index, list):
-                        subtask_index = subtask_index[0]
-                    if subtask_index:
-                        self.todo.change_deadline(main_index - 1, subtask_index - 1)
+                new_deadline = self.get_user_input("Enter new deadline (YYYY-MM-DD):")
+                if new_deadline and not self.is_valid_date(new_deadline):
+                    messagebox.showerror("Error", "Invalid date format. Please use YYYY-MM-DD.")
+                    return
+                item_text = self.task_listbox.get(selected_index)
+                indices = list(map(int, filter(lambda x: x.isdigit(), item_text.split('.')[0].split('-')[:2])))
+                if indices:
+                    main_index, *_ = indices + [0]
+                    if indices[1:]:
+                        main_index, *_ = indices + [0]
+                        self.todo.change_deadline(main_index - 1, new_deadline)
                     else:
                         self.todo.change_deadline(main_index - 1, new_deadline)
                     self.populate_task_listbox()
             except IndexError:
                 messagebox.showerror("Error", "Task not found!")
+
+    def is_valid_date(self, date_string):
+        try:
+            datetime.strptime(date_string, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+
+    def select_file(self):
+        # Select task file
+        file_path = tk.filedialog.askopenfilename(title="Select Todo List File", filetypes=[("JSON files", "*.json")])
+        if file_path:
+            self.todo = TodoList(filename=file_path)
+            self.populate_task_listbox()
 
     def get_user_input(self, prompt):
         user_input = simpledialog.askstring("Input", prompt)
