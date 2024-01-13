@@ -1,6 +1,8 @@
 import json
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
+import tkinter.filedialog as filedialog
+from datetime import datetime
 
 
 class TodoList:
@@ -25,6 +27,12 @@ class TodoList:
         # Save the updated tasks
         self.save_tasks()
 
+    def change_deadline(self, index, new_deadline):
+        # Add task deadline
+        if 0 <= index < len(self.tasks):
+            self.tasks[index]['deadline'] = new_deadline
+            self.save_tasks()
+
     def save_tasks(self):
         # Save tasks to the file
         with open(self.filename, 'w') as file:
@@ -37,19 +45,35 @@ class TodoList:
             # Save the updated tasks
             self.save_tasks()
 
-    def mark_as_done(self, index):
-        # Mark a task as done at the specified index
-        if 0 <= index <= len(self.tasks):
-            self.tasks[index]['done'] = True
+    def mark_as_done(self, index, subtask_index=None):
+        # Mark a task or subtask as done at the specified index
+        if 0 <= index < len(self.tasks):
+            if subtask_index is None:
+                # Mark the main task as done
+                self.tasks[index]['done'] = True
+            else:
+                # Mark the subtask as done
+                subtasks = self.tasks[index].get('subtask', [])
+                if 0 <= subtask_index < len(subtasks):
+                    subtasks[subtask_index]['done'] = True
             # Save the updated tasks
             self.save_tasks()
 
     def add_subtask(self, index, subtask):
         # Add a subtask to the task at the specified index
-        if 0 <= index <= len(self.tasks):
+        if 0 <= index < len(self.tasks):
             self.tasks[index]['subtask'].append({'subtask': subtask, 'done': False})
             # Save the updated tasks
             self.save_tasks()
+
+    def remove_subtask(self, index, subtask_index):
+        # Remove a subtask from the task at the specified index
+        if 0 <= index < len(self.tasks):
+            subtasks = self.tasks[index].get('subtask', [])
+            if 0 <= subtask_index < len(subtasks):
+                del subtasks[subtask_index]
+                # Save the updated tasks
+                self.save_tasks()
 
 
 class TodoApp:
@@ -83,8 +107,19 @@ class TodoApp:
         self.add_subtask_button = tk.Button(root, text="Add Subtask", command=self.add_subtask)
         self.add_subtask_button.pack(pady=5)
 
+        self.remove_subtask_button = tk.Button(root, text="Remove Subtask", command=self.remove_subtask)
+        self.remove_subtask_button.pack(pady=5)
+
         # Populate the task listbox with existing tasks
         self.populate_task_listbox()
+
+        # Deadline change button
+        self.change_deadline_button = tk.Button(root, text="Change Deadline", command=self.change_deadline)
+        self.change_deadline_button.pack(pady=5)
+
+        # File select button
+        self.select_file_button = tk.Button(root, text="Select Todo List File", command=self.select_file)
+        self.select_file_button.pack(pady=5)
 
     def add_task(self):
         # Add a new task to TodoList and update the task listbox
@@ -94,62 +129,120 @@ class TodoApp:
         self.task_entry.delete(0, tk.END)
 
     def remove_task(self):
-        # Remove the selected task or subtask from TodoList and update the task listbox
+        # Remove the selected task from TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            item_text = self.task_listbox.get(selected_index[0])
-            try:
-                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
-            except ValueError:
-                return
-
-            if 1 <= main_index <= len(self.todo.tasks):
-                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
-                    del self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]
-                elif not subtask_index:
-                    del self.todo.tasks[main_index - 1]
-                self.populate_task_listbox()
+            self.todo.remove_task(selected_index[0])
+            self.populate_task_listbox()
 
     def mark_as_done(self):
         # Mark the selected task or subtask as done in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
             item_text = self.task_listbox.get(selected_index[0])
-            try:
-                main_index, *subtask_index = map(int, item_text.split('.')[0].split('-'))
-            except ValueError:
-                return
-
-            if 1 <= main_index <= len(self.todo.tasks):
-                if subtask_index and 1 <= subtask_index[0] <= len(self.todo.tasks[main_index - 1].get('subtask', [])):
-                    self.todo.tasks[main_index - 1]['subtask'][subtask_index[0] - 1]['done'] = True
-                elif not subtask_index:
-                    self.todo.tasks[main_index - 1]['done'] = True
+            clean_text = item_text.strip()
+            indices = [int(index) for index in clean_text.split('.')[0].split('-')[:2] if index.isdigit()]
+            if indices:
+                main_index, *subtask_index = indices + [0]
+                if isinstance(subtask_index, list):
+                    subtask_index = subtask_index[0]
+                if subtask_index is not None:
+                    self.todo.mark_as_done(main_index - 1, subtask_index - 1)
+                else:
+                    self.todo.mark_as_done(main_index - 1)
                 self.populate_task_listbox()
 
     def add_subtask(self):
         # Add a subtask to the selected task in TodoList and update the task listbox
         selected_index = self.task_listbox.curselection()
         if selected_index:
-            original_index = selected_index[0]
             subtask_text = self.subtask_entry.get()
-            self.todo.add_subtask(original_index, subtask_text)
-            self.populate_task_listbox()
-            self.subtask_entry.delete(0, tk.END)
+            item_text = self.task_listbox.get(selected_index[0])
+            main_index, *subtask_index = map(int, item_text.split('.')[0].split('-')[:2] + [0])
+            if isinstance(subtask_index, list) and subtask_index:
+                subtask_index = subtask_index[0]
+            if 0 <= main_index - 1 < len(self.todo.tasks):
+                self.todo.add_subtask(main_index - 1, subtask_text)
+                self.populate_task_listbox()
+                self.subtask_entry.delete(0, tk.END)
+
+    def get_indices(self, selected_index):
+        # Get element index from Listbox
+        item_text = self.task_listbox.get(selected_index[0])
+        return [int(index) for index in item_text.split('.')[0].split('-') if index.isdigit()]
+
+    def remove_subtask(self):
+        # Remove the selected subtask from TodoList and update the task listbox
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            item_text = self.task_listbox.get(selected_index[0])
+            clean_text = item_text.strip()
+            indices = [int(index) for index in clean_text.split('.')[0].split('-') if index.isdigit()]
+            if len(indices) == 2:
+                main_index, subtask_index = indices
+                self.todo.remove_subtask(main_index - 1, subtask_index - 1)
+                self.populate_task_listbox()
 
     def populate_task_listbox(self):
         # Populate the task listbox with tasks from TodoList
         self.task_listbox.delete(0, tk.END)
         for index, task in enumerate(self.todo.tasks, start=1):
             status = 'Done' if task['done'] else 'Not Done'
-            deadline = f" (Deadline: {task['deadline']})" if task['deadline'] else ""
-            self.task_listbox.insert(tk.END, f"{index}. {task['task']} - {status} {deadline}")
+
+            if isinstance(task['deadline'], str):
+                deadline = f" (Deadline: {task['deadline']})"
+            elif isinstance(task['deadline'], datetime):
+                deadline = f" (Deadline: {task['deadline'].strftime('%Y-%m-%d')})"
+            else:
+                deadline = ""
+
+            self.task_listbox.insert(tk.END, f"{index}. {task['task']} - {status}{deadline}")
 
             # Check if there are subtasks and display them
             subtasks = task.get('subtask', [])
             for subtask_index, subtask in enumerate(subtasks, start=1):
                 subtask_status = 'Done' if subtask['done'] else 'Not Done'
                 self.task_listbox.insert(tk.END, f"     - Subtask: {subtask['subtask']} - {subtask_status}")
+
+    def change_deadline(self):
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            try:
+                selected_index = selected_index[0]
+                new_deadline = self.get_user_input("Enter new deadline (YYYY-MM-DD):")
+                if new_deadline and not self.is_valid_date(new_deadline):
+                    messagebox.showerror("Error", "Invalid date format. Please use YYYY-MM-DD.")
+                    return
+                item_text = self.task_listbox.get(selected_index)
+                indices = list(map(int, filter(lambda x: x.isdigit(), item_text.split('.')[0].split('-')[:2])))
+                if indices:
+                    main_index, *_ = indices + [0]
+                    if indices[1:]:
+                        main_index, *_ = indices + [0]
+                        self.todo.change_deadline(main_index - 1, new_deadline)
+                    else:
+                        self.todo.change_deadline(main_index - 1, new_deadline)
+                    self.populate_task_listbox()
+            except IndexError:
+                messagebox.showerror("Error", "Task not found!")
+
+    def is_valid_date(self, date_string):
+        try:
+            datetime.strptime(date_string, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+
+    def select_file(self):
+        # Select task file
+        file_path = tk.filedialog.askopenfilename(title="Select Todo List File", filetypes=[("JSON files", "*.json")])
+        if file_path:
+            self.todo = TodoList(filename=file_path)
+            self.populate_task_listbox()
+
+    def get_user_input(self, prompt):
+        user_input = simpledialog.askstring("Input", prompt)
+        return user_input
 
 
 if __name__ == "__main__":
